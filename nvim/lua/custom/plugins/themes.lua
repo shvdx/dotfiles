@@ -7,11 +7,19 @@ end, { desc = 'Telescope colorschemes' })
 
 return {
   'rebelot/kanagawa.nvim',
-  'sho-87/kanagawa-paper.nvim',
   'EdenEast/nightfox.nvim',
   'catppuccin/nvim',
   'AlexvZyl/nordic.nvim',
   'felipeagc/fleet-theme-nvim',
+
+  {
+    'thesimonho/kanagawa-paper.nvim',
+    config = function()
+      require('kanagawa-paper').setup {
+        terminal_colors = true,
+      }
+    end,
+  },
 
   {
     'scottmckendry/cyberdream.nvim',
@@ -37,7 +45,7 @@ return {
           default = true,
         },
       }
-      vim.cmd 'colorscheme cyberdream'
+      -- vim.cmd 'colorscheme cyberdream'
     end,
   },
 
@@ -58,9 +66,11 @@ return {
       update_interval = 1000,
       set_dark_mode = function()
         vim.api.nvim_set_option_value('background', 'dark', {})
+        vim.cmd 'colorscheme kanagawa-paper'
       end,
       set_light_mode = function()
         vim.api.nvim_set_option_value('background', 'light', {})
+        vim.cmd 'colorscheme dawnfox'
       end,
     },
   },
