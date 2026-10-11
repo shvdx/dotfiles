@@ -774,9 +774,9 @@ require('lazy').setup({
         ktfmt = {
           prepend_args = { '--kotlinlang-style' },
         },
-        -- project .clang-format wins; else Google
+        -- project .clang-format wins; else fall back to LLVM
         clang_format = {
-          prepend_args = { '--style=file', '--fallback-style=Google' },
+          prepend_args = { '--style=file', '--fallback-style=LLVM' },
         },
       },
     },
