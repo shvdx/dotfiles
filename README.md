@@ -23,3 +23,24 @@ ln -s ~/.config/dotfiles/claude/themes /themes
 
 Set `theme = vesper-light` (or `vesper-dark`) in settings.
 
+### Wiring
+
+#### SSH Remote
+
+```shell
+# `.bashrc` or `.zshrc`
+export LC_TMUX_CONF="$(base64 < ~/.config/dotfiles/tmux/tmux.remote.conf)"
+```
+
+```config
+# `~/.ssh/config`
+
+Host someServer
+    HostName someIP
+    User someUser
+    SendEnv LC_TMUX_CONF
+    RemoteCommand S=<session_name>; F=~/.tmux.conf; echo "$LC_TMUX_CONF" | base64 -d > "$F"; exec tmux -f "$F" new -A -s "$S"
+    RequestTTY yes
+
+```
+
