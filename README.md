@@ -39,7 +39,7 @@ Host someServer
     HostName someIP
     User someUser
     SendEnv LC_TMUX_CONF
-    RemoteCommand S=<session_name>; F=~/.tmux.conf; echo "$LC_TMUX_CONF" | base64 -d > "$F"; exec tmux -f "$F" new -A -s "$S"
+    RemoteCommand S=<session_name>; F=~/.tmux.conf; echo "$LC_TMUX_CONF" | base64 -d > "$F"; exec tmux -f "$F" new -A -s "$S"\; source-file "$F"
     RequestTTY yes
 
 ```
