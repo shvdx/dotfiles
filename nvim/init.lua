@@ -741,22 +741,6 @@ require('lazy').setup({
     },
     opts = {
       notify_on_error = false,
-      format_on_save = function(bufnr)
-        -- Disable "format_on_save lsp_fallback" for languages that don't
-        -- have a well standardized coding style. You can add additional
-        -- languages here or re-enable it for the disabled ones.
-        local disable_filetypes = { c = true, cpp = true, objc = true, objcpp = true }
-        if disable_filetypes[vim.bo[bufnr].filetype] then
-          return nil
-        end
-        -- ktfmt runs on the JVM, so its cold start can blow past a 500ms budget and
-        -- format-on-save would silently bail. Give Kotlin a roomier timeout.
-        local timeout_ms = vim.bo[bufnr].filetype == 'kotlin' and 3000 or 500
-        return {
-          timeout_ms = timeout_ms,
-          lsp_format = 'fallback',
-        }
-      end,
       formatters_by_ft = {
         lua = { 'stylua' },
         kotlin = { 'ktfmt' },
