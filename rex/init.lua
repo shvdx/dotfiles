@@ -454,9 +454,51 @@ rex.action({
 -- prefix; C-a C-a => send-prefix
 rex.bind(PREFIX .. ">" .. PREFIX, "pane.send_key", { key = PREFIX })
 
--- splits (| and - on US layout), new tab
+-- app defaults replaced by prefix binds; unbound => key goes to the terminal;
+-- key + action => no-op if a later app version rebinds the key
+rex.unbind("cmd+shift+left")
+rex.unbind("cmd+shift+right")
+rex.unbind("cmd+shift+up")
+rex.unbind("cmd+shift+down")
+
+-- tabs => prefix c / shift+x, alt+n / alt+p
+rex.unbind("cmd+t", "client.tab.new")
+rex.unbind("alt+cmd+w", "client.tab.close")
+rex.unbind("ctrl+tab", "client.tab.next")
+rex.unbind("shift+cmd+]", "client.tab.next")
+rex.unbind("ctrl+shift+tab", "client.tab.previous")
+rex.unbind("shift+cmd+[", "client.tab.previous")
+
+-- splits => prefix | \ - _
+rex.unbind("cmd+d", "pane.split.right")
+rex.unbind("shift+cmd+d", "pane.split.down")
+rex.unbind("cmd+enter", "pane.split.auto")
+
+-- focus => prefix hjkl
+rex.unbind("alt+cmd+left", "pane.focus.left")
+rex.unbind("alt+cmd+right", "pane.focus.right")
+rex.unbind("alt+cmd+up", "pane.focus.up")
+rex.unbind("alt+cmd+down", "pane.focus.down")
+rex.unbind("cmd+]", "pane.focus_next")
+rex.unbind("cmd+[", "pane.focus_previous")
+
+-- move => prefix alt+hjkl
+rex.unbind("alt+shift+cmd+left", "pane.move.left")
+rex.unbind("alt+shift+cmd+right", "pane.move.right")
+rex.unbind("alt+shift+cmd+up", "pane.move.up")
+rex.unbind("alt+shift+cmd+down", "pane.move.down")
+
+-- zoom => prefix z
+rex.unbind("shift+cmd+enter", "pane.zoom")
+
+-- close pane => prefix x; cmd+w also holds client.close => drop whole key, else cmd+w closes window
+rex.unbind("cmd+w")
+
+-- splits (| \ - _ on US layout), new tab; shift => opposite direction
 rex.bind(PREFIX .. ">shift+\\", "pane.split", { direction = "right" })
+rex.bind(PREFIX .. ">\\", "pane.split", { direction = "left" })
 rex.bind(PREFIX .. ">-", "pane.split", { direction = "down" })
+rex.bind(PREFIX .. ">shift+-", "pane.split", { direction = "up" })
 rex.bind(PREFIX .. ">c", "client.tab.new")
 
 -- pane focus with prefix
@@ -476,6 +518,12 @@ rex.bind("alt+shift+h", "pane.resize", { direction = "left", amount = 5 })
 rex.bind("alt+shift+j", "pane.resize", { direction = "down", amount = 5 })
 rex.bind("alt+shift+k", "pane.resize", { direction = "up", amount = 5 })
 rex.bind("alt+shift+l", "pane.resize", { direction = "right", amount = 5 })
+
+-- resize with prefix (alt+arrows); one step per prefix
+rex.bind(PREFIX .. ">alt+left", "pane.resize", { direction = "left", amount = 5 })
+rex.bind(PREFIX .. ">alt+down", "pane.resize", { direction = "down", amount = 5 })
+rex.bind(PREFIX .. ">alt+up", "pane.resize", { direction = "up", amount = 5 })
+rex.bind(PREFIX .. ">alt+right", "pane.resize", { direction = "right", amount = 5 })
 
 -- tab navigation without prefix; tmux base-index 1
 for index = 1, 9 do
