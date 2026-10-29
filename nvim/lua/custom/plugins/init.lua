@@ -5,7 +5,7 @@
 
 vim.o.winborder = 'rounded'
 vim.go.pumborder = 'rounded'
-vim.opt.cmdheight = 1
+vim.opt.cmdheight = 0
 
 return {
   'ThePrimeagen/vim-be-good',
