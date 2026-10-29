@@ -254,9 +254,30 @@ local function session_save(session_id)
 	return { label = view.label, initial_windows = windows }
 end
 
--- other sessions need the stream attached for view/block calls; action's own session already is
-local function session_save_attached(session_id, own_session_id)
-	if session_id == own_session_id then
+-- action runs as the app's client => session ids it's attached to; detaching those cuts the app off
+local function client_session_ids(own_session_id)
+	-- re-attaching own session is a no-op => returns this client's id
+	local attached, err = rex.call("session.attach", { session_id = own_session_id })
+	if err ~= nil then
+		error(err, 0)
+	end
+
+	local inspected, inspect_err = rex.call("client.inspect", { client_id = attached.client_id })
+	if inspect_err ~= nil then
+		error(inspect_err, 0)
+	end
+
+	local session_ids = {}
+	for _, session_id in ipairs(inspected.client.session_ids or {}) do
+		session_ids[session_id] = true
+	end
+	assert(session_ids[own_session_id])
+	return session_ids
+end
+
+-- view/block calls need an attached client; attach only sessions the client isn't already on
+local function session_save_attached(session_id, session_ids_attached)
+	if session_ids_attached[session_id] then
 		return session_save(session_id)
 	end
 
@@ -301,9 +322,10 @@ rex.action({
 		end
 		assert(#list.sessions <= SESSIONS_MAX)
 
+		local session_ids_attached = client_session_ids(ctx.session_id)
 		local saved = {}
 		for _, session in ipairs(list.sessions) do
-			table.insert(saved, session_save_attached(session.session_id, ctx.session_id))
+			table.insert(saved, session_save_attached(session.session_id, session_ids_attached))
 		end
 
 		sessions_write(saved)
