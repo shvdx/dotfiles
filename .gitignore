@@ -21,3 +21,6 @@ nvim/*lock*
 !tmux
 !tmux/**
 tmux/plugins
+
+!rex
+!rex/**

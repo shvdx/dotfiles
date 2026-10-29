@@ -9,6 +9,7 @@ ln -s dotfiles/nvim nvim
 ln -s dotfiles/tmux tmux
 ln -s dotfiles/ghostty ghostty
 ln -s dotfiles/tuicr tuicr
+ln -s dotfiles/rex rex
 mkdir -p opencode
 cd opencode
 ln -s ../dotfiles/opencode/themes themes
