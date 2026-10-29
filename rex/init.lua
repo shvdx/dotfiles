@@ -10,12 +10,11 @@ local TERMINAL = "com.superlogical.terminal"
 local POPUP_BOUNDS = { 0.05, 0.05, 0.9, 0.9 }
 local SCRATCH_LABEL = "scratch"
 local TASKS_DIR = os.getenv("HOME") .. "/recs"
-local SCRIPTS_DIR = os.getenv("HOME") .. "/.config/rex/scripts"
 
--- cli the app's server runs from; `Current` follows app updates
-local REX_CLI = os.getenv("HOME")
-	.. "/Library/Application Support/com.superlogical.rex/RexServer/Versions/Current"
-	.. "/Rex Server.app/Contents/MacOS/rex"
+-- session save/restore
+local SESSIONS_PATH = os.getenv("HOME") .. "/.local/state/rex-sessions.json"
+local SESSIONS_MAX = 64
+local LAYOUT_DEPTH_MAX = 32
 
 -- focused terminal's last reported cwd; file://host/a%20b => /a b; else nil
 local function block_pwd(ctx)
@@ -65,15 +64,36 @@ local function block_find(label)
 	return nil
 end
 
+-- popup label => pane focused before it opened; rex refocuses an arbitrary pane on hide/close;
+-- program exiting on its own (q, :q, exit) => rex picks focus; config can't observe block exit
+local popup_focus_origin = {}
+
+-- refocus pane that opened `label`; call before hide/close => popup unfocused => rex keeps focus;
+-- pane may be gone since => only logged
+local function popup_focus_return(label)
+	local block_id = popup_focus_origin[label]
+	popup_focus_origin[label] = nil
+	if block_id == nil then
+		return
+	end
+
+	local _, err = rex.session.focus_block({ block_id = block_id })
+	if err ~= nil then
+		rex.log("warn", "popup focus return: " .. err)
+	end
+end
+
 -- popup that keeps running: placed => detach (hide); detached => float back; none => create
 local function float_toggle(ctx, label, options)
 	local block = block_find(label)
 	if block == nil then
+		popup_focus_origin[label] = ctx.block_id
 		popup_open(options, label)
 		return
 	end
 
 	if block.placement == "placed" then
+		popup_focus_return(label)
 		local _, err = rex.session.detach_block({ block_id = block.block_id })
 		if err ~= nil then
 			error(err, 0)
@@ -82,6 +102,7 @@ local function float_toggle(ctx, label, options)
 	end
 
 	assert(ctx.block_id ~= block.block_id)
+	popup_focus_origin[label] = ctx.block_id
 
 	-- detached block can't float directly => place beside focused block, then float
 	local _, err = rex.session.move_block({
@@ -111,6 +132,7 @@ rex.action({
 		local lazygit = block_find("lazygit")
 		if lazygit ~= nil then
 			assert(ctx.session_id ~= nil)
+			popup_focus_return("lazygit")
 			local _, err = rex.call("block.close", {
 				session_id = ctx.session_id,
 				block_id = lazygit.block_id,
@@ -121,6 +143,7 @@ rex.action({
 			return
 		end
 
+		popup_focus_origin["lazygit"] = ctx.block_id
 		popup_open({ command = { "lazygit" }, cwd = block_pwd(ctx) }, "lazygit")
 	end,
 })
@@ -165,49 +188,172 @@ local function bell()
 	end
 end
 
--- `rex do` output => action result; drops `info: ` log prefixes
-local function script_output(result)
-	local output = (result.stdout .. result.stderr):gsub("info: ", "")
-	return output
+-- foreground process's local cwd (ssh => local dir, not remote); else nil
+local function session_block_cwd(session_id, block_id)
+	local process = rex.call("block.method", {
+		session_id = session_id,
+		block_id = block_id,
+		method = "process",
+	})
+	if process == nil or process.foreground == nil then
+		return nil
+	end
+	return process.foreground.cwd
 end
 
--- run scripts/save.lua via cli => one save impl for key, palette, and shell
+-- view layout node => session.create layout node; block_id leaf => { block = flavor, label, cwd }
+local function layout_save(node, blocks_by_id, session_id, depth)
+	assert(depth <= LAYOUT_DEPTH_MAX)
+	if node.split ~= nil then
+		return {
+			split = {
+				direction = node.split.direction,
+				ratio = node.split.ratio,
+				before = layout_save(node.split.before, blocks_by_id, session_id, depth + 1),
+				after = layout_save(node.split.after, blocks_by_id, session_id, depth + 1),
+			},
+		}
+	end
+
+	local block = blocks_by_id[node.block_id]
+	assert(block ~= nil)
+
+	return {
+		block = {
+			flavor = block.flavor,
+			label = block.label,
+			options = { cwd = session_block_cwd(session_id, node.block_id) },
+		},
+	}
+end
+
+-- one session => { label, initial_windows }; floating layers skipped (popups, scratch)
+local function session_save(session_id)
+	local view, err = rex.session.view({ session_id = session_id })
+	if err ~= nil then
+		error(err, 0)
+	end
+
+	local windows = {}
+	for _, window in ipairs(view.windows or {}) do
+		for _, layer in ipairs(window.layers or {}) do
+			if layer.kind == "tiled" and layer.layout ~= nil then
+				local blocks_by_id = {}
+				for _, block in ipairs(layer.blocks or {}) do
+					blocks_by_id[block.block_id] = block
+				end
+
+				table.insert(windows, {
+					window_label = window.label,
+					layout = layout_save(layer.layout, blocks_by_id, session_id, 1),
+				})
+			end
+		end
+	end
+
+	return { label = view.label, initial_windows = windows }
+end
+
+-- other sessions need the stream attached for view/block calls; action's own session already is
+local function session_save_attached(session_id, own_session_id)
+	if session_id == own_session_id then
+		return session_save(session_id)
+	end
+
+	local _, err = rex.call("session.attach", { session_id = session_id })
+	if err ~= nil then
+		error(err, 0)
+	end
+
+	-- pcall => detach even if saving fails
+	local ok, result = pcall(session_save, session_id)
+	rex.call("session.detach", { session_id = session_id })
+	if not ok then
+		error(result, 0)
+	end
+
+	return result
+end
+
+-- write tmp then rename => crash mid-write never leaves a partial save
+local function sessions_write(saved)
+	local mkdir = rex.exec({ "mkdir", "-p", (SESSIONS_PATH:gsub("/[^/]*$", "")) }, { timeout = 5 })
+	if not mkdir.ok then
+		error(mkdir.stderr, 0)
+	end
+
+	local path_tmp = SESSIONS_PATH .. ".tmp"
+	local file = assert(io.open(path_tmp, "w"))
+	file:write(rex.json.encode(saved, { indent = true }))
+	file:close()
+
+	assert(os.rename(path_tmp, SESSIONS_PATH))
+end
+
+-- every session's tiled layout + each pane's cwd => SESSIONS_PATH
 rex.action({
 	name = "session_save",
 	title = "Save Sessions",
 	run = function(ctx, args)
-		local result, err = rex.exec({ REX_CLI, "do", SCRIPTS_DIR .. "/save.lua" }, { timeout = 20 })
-		if result == nil then
+		local list, err = rex.call("session.list")
+		if err ~= nil then
 			error(err, 0)
 		end
+		assert(#list.sessions <= SESSIONS_MAX)
 
-		if not result.ok then
-			error(result.stderr, 0)
+		local saved = {}
+		for _, session in ipairs(list.sessions) do
+			table.insert(saved, session_save_attached(session.session_id, ctx.session_id))
 		end
 
-		local output = script_output(result)
+		sessions_write(saved)
 		bell()
-		return { output = output }
+		return { saved = #saved, path = SESSIONS_PATH }
 	end,
 })
 
--- run scripts/restore.lua via cli; skips sessions whose label already exists
+-- recreate saved sessions; labels already live => skipped, so running twice never duplicates
 rex.action({
 	name = "session_restore",
 	title = "Restore Sessions",
 	run = function(ctx, args)
-		local result, err = rex.exec({ REX_CLI, "do", SCRIPTS_DIR .. "/restore.lua" }, { timeout = 20 })
-		if result == nil then
+		local file = io.open(SESSIONS_PATH, "r")
+		if file == nil then
+			error("no saved sessions at " .. SESSIONS_PATH, 0)
+		end
+
+		local saved, decode_err = rex.json.decode(file:read("*a"))
+		file:close()
+		if saved == nil then
+			error(decode_err, 0)
+		end
+
+		local list, err = rex.call("session.list")
+		if err ~= nil then
 			error(err, 0)
 		end
 
-		if not result.ok then
-			error(result.stderr, 0)
+		local live = {}
+		for _, session in ipairs(list.sessions) do
+			live[session.label] = true
 		end
 
-		local output = script_output(result)
+		local restored, skipped = {}, {}
+		for _, session in ipairs(saved) do
+			if live[session.label] or #session.initial_windows == 0 then
+				table.insert(skipped, session.label)
+			else
+				local _, create_err = rex.call("session.create", session)
+				if create_err ~= nil then
+					error(session.label .. ": " .. create_err, 0)
+				end
+
+				table.insert(restored, session.label)
+			end
+		end
+
 		bell()
-		return { output = output }
+		return { restored = restored, skipped = skipped }
 	end,
 })
 
