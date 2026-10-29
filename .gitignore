@@ -24,3 +24,6 @@ tmux/plugins
 
 !rex
 !rex/**
+
+!lazygit
+!lazygit/**

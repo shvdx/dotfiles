@@ -16,6 +16,8 @@ ln -s ../dotfiles/opencode/themes themes
 mkdir -p ~/.claude
 cd ~/.claude
 ln -s ~/.config/dotfiles/claude/themes /themes
+mkdir -p ~/Library/Application\ Support/lazygit
+ln -s ~/.config/dotfiles/lazygit/config.yml ~/Library/Application\ Support/lazygit/config.yml
 ```
 
 > Note: Make sure to rename or remove existing `nvim` or `tmux` folders

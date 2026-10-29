@@ -1,0 +1,12 @@
+git:
+  pagers:
+    # dark; vesper diff bgs from tuicr/themes/vesper.toml
+    - colorArg: always
+      pager: >-
+        delta --paging=never --dark --line-numbers --syntax-theme=ansi
+        --plus-style='syntax "#102e2a"' --minus-style='syntax "#3a1f1f"'
+    # light; bgs from tuicr/themes/vesper-light.toml
+    - colorArg: always
+      pager: >-
+        delta --paging=never --light --line-numbers --syntax-theme=ansi
+        --plus-style='syntax "#dff0ea"' --minus-style='syntax "#f5dede"'
