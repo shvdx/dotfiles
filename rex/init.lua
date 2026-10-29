@@ -130,9 +130,12 @@ rex.action({
 	title = "Lazygit Popup",
 	run = function(ctx, args)
 		local lazygit = block_find("lazygit")
+
 		if lazygit ~= nil then
 			assert(ctx.session_id ~= nil)
+
 			popup_focus_return("lazygit")
+
 			local _, err = rex.call("block.close", {
 				session_id = ctx.session_id,
 				block_id = lazygit.block_id,
@@ -140,6 +143,7 @@ rex.action({
 			if err ~= nil then
 				error(err, 0)
 			end
+
 			return
 		end
 
@@ -171,20 +175,68 @@ rex.action({
 	end,
 })
 
--- ring terminal bell from a hidden block; sleep => app sees bell before block closes;
--- quick_exit_threshold_ms = 0 => closes even on a fast exit (default 250 keeps it open)
-local function bell()
-	local _, err = rex.session.new_block({
-		flavor = SHELL,
-		label = "bell",
-		options = {
-			shell = "none",
-			command = { "/bin/sh", "-c", "printf '\\007'; sleep 3" },
-			exit = { on_completion = true, quick_exit_threshold_ms = 0 },
+-- "1 session" / "3 sessions"
+local function sessions_count(count)
+	assert(count >= 0)
+	if count == 1 then
+		return "1 session"
+	end
+	return count .. " sessions"
+end
+
+-- app skips OSC 777 from the on-screen session => print it from a throwaway session;
+-- `;` in title/body splits OSC fields; options = { tab, title, body }
+local function notify(options)
+	assert(type(options.tab) == "string")
+	assert(type(options.title) == "string")
+	assert(type(options.body) == "string")
+
+	-- banner's 2nd line = this label
+	local created, err = rex.call("session.create", {
+		label = "rex-config",
+		initial_windows = {
+			{
+				window_label = options.tab,
+				layout = {
+					block = {
+						flavor = SHELL,
+						label = "notify",
+						options = {
+							shell = "none",
+							command = {
+								"/bin/sh",
+								"-c",
+								'printf \'\\033]777;notify;%s;%s\\007\' "$1" "$2"; sleep 3',
+								"notify",
+								options.title,
+								options.body,
+							},
+						},
+					},
+				},
+			},
 		},
 	})
 	if err ~= nil then
-		rex.log("warn", "bell: " .. err)
+		rex.log("warn", "notify: " .. err)
+		return
+	end
+
+	assert(created.session_id ~= nil)
+
+	-- app reads the event while the session lives; rex.exec => server keeps handling keys
+	rex.exec({ "sleep", "1" }, { timeout = 5 })
+
+	-- session outlives its exited block => destroy explicitly; destroy needs an attached client
+	local _, attach_err = rex.call("session.attach", { session_id = created.session_id })
+	if attach_err ~= nil then
+		rex.log("warn", "notify attach: " .. attach_err)
+		return
+	end
+
+	local _, destroy_err = rex.call("session.destroy", { session_id = created.session_id })
+	if destroy_err ~= nil then
+		rex.log("warn", "notify destroy: " .. destroy_err)
 	end
 end
 
@@ -329,7 +381,15 @@ rex.action({
 		end
 
 		sessions_write(saved)
-		bell()
+		local labels = {}
+		for _, session in ipairs(saved) do
+			table.insert(labels, session.label or "unnamed")
+		end
+		notify({
+			tab = "save session",
+			title = "Saved " .. sessions_count(#saved),
+			body = table.concat(labels, ", "),
+		})
 		return { saved = #saved, path = SESSIONS_PATH }
 	end,
 })
@@ -374,7 +434,19 @@ rex.action({
 			end
 		end
 
-		bell()
+		-- nothing restored => say so instead of "Restored 0 sessions"
+		local title = "Nothing to restore"
+		if #restored > 0 then
+			title = "Restored " .. sessions_count(#restored)
+		end
+		local parts = {}
+		if #restored > 0 then
+			table.insert(parts, table.concat(restored, ", "))
+		end
+		if #skipped > 0 then
+			table.insert(parts, "skipped " .. table.concat(skipped, ", "))
+		end
+		notify({ tab = "restore session", title = title, body = table.concat(parts, " · ") })
 		return { restored = restored, skipped = skipped }
 	end,
 })
