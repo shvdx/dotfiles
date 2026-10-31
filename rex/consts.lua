@@ -6,8 +6,8 @@ consts.PREFIX = 'ctrl+a'
 consts.SHELL = 'com.superlogical.terminal.shell'
 consts.TERMINAL = 'com.superlogical.terminal'
 
--- tmux display-popup -w 90% -h 90%, centered; { x, y, w, h } fractions
-consts.POPUP_BOUNDS = { 0.05, 0.05, 0.9, 0.9 }
+-- tmux display-popup -w 92% -h 92%, centered; { x, y, w, h } fractions
+consts.POPUP_BOUNDS = { 0.04, 0.04, 0.92, 0.92 }
 consts.SCRATCH_LABEL = 'scratch'
 consts.TASKS_DIR = os.getenv 'HOME' .. '/recs'
 
