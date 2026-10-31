@@ -42,6 +42,19 @@ vim.o.showmode = false
 --  See `:help 'clipboard'`
 vim.schedule(function()
   vim.o.clipboard = 'unnamedplus'
+  -- headless linux (no X/wayland) => no clipboard tool; copy via OSC 52 through rex
+  if vim.fn.has('linux') == 1 and vim.env.DISPLAY == nil and vim.env.WAYLAND_DISPLAY == nil then
+    local osc52 = require('vim.ui.clipboard.osc52')
+    -- paste from unnamed reg; OSC 52 read can block on a terminal permission prompt
+    local function paste()
+      return vim.split(vim.fn.getreg(''), '\n'), vim.fn.getregtype('')
+    end
+    vim.g.clipboard = {
+      name = 'osc52',
+      copy = { ['+'] = osc52.copy('+'), ['*'] = osc52.copy('*') },
+      paste = { ['+'] = paste, ['*'] = paste },
+    }
+  end
 end)
 
 -- Enable break indent
