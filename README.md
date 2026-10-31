@@ -104,7 +104,7 @@ The remote path comes from `rex server status` on the server. The uid differs pe
 
 ```shell
 ssh -N someServer-rex                # keep open while connected; Ctrl-C to disconnect
-rex hosts add someServer unix:///Users/shank/.ssh/rex-someServer.sock   # once
+rex hosts add someServer unix:///Users/local_user/.ssh/rex-someServer.sock   # once
 rex -S someServer ls
 ```
 
