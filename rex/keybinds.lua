@@ -68,6 +68,12 @@ rex.bind(PREFIX .. ">alt+j", "pane.move", { direction = "down" })
 rex.bind(PREFIX .. ">alt+k", "pane.move", { direction = "up" })
 rex.bind(PREFIX .. ">alt+l", "pane.move", { direction = "right" })
 
+-- real pane move (re-split beside neighbor), not swap => panes.lua
+rex.bind(PREFIX .. ">shift+left", "pane_move", { direction = "left" })
+rex.bind(PREFIX .. ">shift+down", "pane_move", { direction = "down" })
+rex.bind(PREFIX .. ">shift+up", "pane_move", { direction = "up" })
+rex.bind(PREFIX .. ">shift+right", "pane_move", { direction = "right" })
+
 -- resize without prefix (alt+shift+hjkl)
 rex.bind("alt+shift+h", "pane.resize", { direction = "left", amount = 5 })
 rex.bind("alt+shift+j", "pane.resize", { direction = "down", amount = 5 })
