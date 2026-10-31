@@ -5,22 +5,22 @@ local EPSILON = 0.0001
 
 -- direction => split axis, side of anchor, opposite direction
 local DIRECTIONS = {
-  left = { axis = "horizontal", side = "before", opposite = "right" },
-  right = { axis = "horizontal", side = "after", opposite = "left" },
-  up = { axis = "vertical", side = "before", opposite = "down" },
-  down = { axis = "vertical", side = "after", opposite = "up" },
+  left = { axis = 'horizontal', side = 'before', opposite = 'right' },
+  right = { axis = 'horizontal', side = 'after', opposite = 'left' },
+  up = { axis = 'vertical', side = 'before', opposite = 'down' },
+  down = { axis = 'vertical', side = 'after', opposite = 'up' },
 }
 
 -- tiled layer holding `block_id` => { rects = { [id] = rect }, axis = parent split dir }; else nil
 local function layout_find(session_id, block_id)
-  local view, err = rex.call("session.view", { session_id = session_id })
+  local view, err = rex.call('session.view', { session_id = session_id })
   if err ~= nil then
     error(err, 0)
   end
 
   for _, window in ipairs(view.windows or {}) do
     for _, layer in ipairs(window.layers or {}) do
-      if layer.kind == "tiled" and layer.layout ~= nil then
+      if layer.kind == 'tiled' and layer.layout ~= nil then
         local rects = {}
         -- block alone in layer => nil axis
         local axis_by_block = {}
@@ -74,8 +74,8 @@ local function neighbor_find(rects, block_id, direction)
       local overlap = 0
       local position = 0
 
-      if direction == "left" or direction == "right" then
-        if direction == "right" then
+      if direction == 'left' or direction == 'right' then
+        if direction == 'right' then
           touches = math.abs(ox - (x + w)) < EPSILON
         else
           touches = math.abs((ox + ow) - x) < EPSILON
@@ -84,7 +84,7 @@ local function neighbor_find(rects, block_id, direction)
         overlap = math.min(y + h, oy + oh) - math.max(y, oy)
         position = oy
       else
-        if direction == "down" then
+        if direction == 'down' then
           touches = math.abs(oy - (y + h)) < EPSILON
         else
           touches = math.abs((oy + oh) - y) < EPSILON
@@ -136,7 +136,7 @@ local function pane_move(ctx, direction)
     end
   else
     -- opposite first => sibling across the split line
-    for _, toward in ipairs({ spec.opposite, "left", "right", "up", "down" }) do
+    for _, toward in ipairs { spec.opposite, 'left', 'right', 'up', 'down' } do
       if toward ~= direction then
         anchor_id = neighbor_find(layout.rects, ctx.block_id, toward)
         if anchor_id ~= nil then
@@ -148,7 +148,7 @@ local function pane_move(ctx, direction)
   assert(anchor_id ~= nil)
   assert(anchor_id ~= ctx.block_id)
 
-  local _, err = rex.call("session.move_block", {
+  local _, err = rex.call('session.move_block', {
     session_id = ctx.session_id,
     block_id = ctx.block_id,
     anchor_block_id = anchor_id,
@@ -160,10 +160,10 @@ local function pane_move(ctx, direction)
   end
 end
 
-rex.action({
-  name = "pane_move",
-  title = "Move Pane",
+rex.action {
+  name = 'pane_move',
+  title = 'Move Pane',
   run = function(ctx, args)
     pane_move(ctx, args.direction)
   end,
-})
+}
