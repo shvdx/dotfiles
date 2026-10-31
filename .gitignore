@@ -23,7 +23,7 @@ nvim/*lock*
 tmux/plugins
 
 !rex
-!rex/**
+!rex/**.lua
 
 !lazygit
 !lazygit/**
