@@ -23,6 +23,12 @@ return {
   keys = {
     { '<S-l>', '<cmd>BufferLineCycleNext<cr>', desc = 'Next buffer tab' },
     { '<S-h>', '<cmd>BufferLineCyclePrev<cr>', desc = 'Prev buffer tab' },
-    { '<S-x>', function() Snacks.bufdelete() end, desc = 'Close buffer tab' }, -- keeps split layout
+    {
+      '<S-x>',
+      function()
+        Snacks.bufdelete()
+      end,
+      desc = 'Close buffer tab',
+    }, -- keeps split layout
   },
 }
