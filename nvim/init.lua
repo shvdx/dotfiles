@@ -941,6 +941,30 @@ require('lazy').setup({
         return '%2l:%-2v'
       end
 
+      -- rex `extend` skips a row holding a powerline glyph => statusline never droops into padding
+      local function statusline_guard_update()
+        for _, hl in ipairs { 'MiniStatuslineFilename', 'MiniStatuslineInactive' } do
+          local bg = vim.api.nvim_get_hl(0, { name = hl, link = false }).bg
+          -- fg = bg => glyph invisible
+          vim.api.nvim_set_hl(0, hl .. 'Guard', { fg = bg, bg = bg })
+        end
+      end
+      statusline_guard_update()
+      vim.api.nvim_create_autocmd('ColorScheme', { callback = statusline_guard_update })
+
+      -- guard cell right before the `%=` fill
+      local function statusline_guarded(content, hl)
+        return (content:gsub('%%=', '%%#' .. hl .. 'Guard#\u{E0B0}%%#' .. hl .. '#%%=', 1))
+      end
+      local statusline_active, statusline_inactive = statusline.active, statusline.inactive
+      statusline.active = function()
+        return statusline_guarded(statusline_active(), 'MiniStatuslineFilename')
+      end
+      statusline.inactive = function()
+        return statusline_guarded(statusline_inactive(), 'MiniStatuslineInactive')
+      end
+
+      --
       -- ... and there is more!
       --  Check out: https://github.com/echasnovski/mini.nvim
     end,
