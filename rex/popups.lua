@@ -73,32 +73,81 @@ local function popup_focus_return(label)
   end
 end
 
--- popup that keeps running: placed => detach (hide); detached => float back; none => create
+-- tmux shows one popup at a time
+local POPUP_LABELS = { lazygit = true, tasks = true, [SCRATCH_LABEL] = true }
+
+-- focus back to opener first; lazygit => close (no state), others => detach (keep state)
+local function popup_dismiss(ctx, block)
+  popup_focus_return(block.label)
+
+  local _, err
+  if block.label == 'lazygit' then
+    _, err = rex.call('block.close', { session_id = ctx.session_id, block_id = block.block_id })
+  else
+    _, err = rex.session.detach_block { block_id = block.block_id }
+  end
+
+  if err ~= nil then
+    error(err, 0)
+  end
+end
+
+-- dismiss active tab's popups except `keep_label`
+-- => opener of dismissed popup; else ctx pane, first tiled pane (move_block anchor), active tab
+local function popups_dismiss(ctx, keep_label)
+  local view, err = rex.call('session.view', { session_id = ctx.session_id })
+  if err ~= nil then
+    error(err, 0)
+  end
+
+  local origin, anchor, dismissed = nil, nil, false
+  for _, window in ipairs(view.windows or {}) do
+    if window.window_id == view.active_window_id then
+      for _, layer in ipairs(window.layers or {}) do
+        for _, block in ipairs(layer.blocks or {}) do
+          if layer.kind == 'tiled' then
+            anchor = anchor or block.block_id
+          elseif POPUP_LABELS[block.label] and block.label ~= keep_label then
+            origin = origin or popup_focus_origin[block.label]
+            dismissed = true
+            popup_dismiss(ctx, block)
+          end
+        end
+      end
+    end
+  end
+
+  -- none dismissed => ctx pane alive; opener lost (reload) => ctx may be closed => tiled pane
+  if not dismissed then
+    origin = ctx.block_id
+  end
+
+  return origin or anchor, anchor, view.active_window_id
+end
+
+-- popup that keeps running: placed here => dismiss; detached or in another tab => float here;
+-- none => create
 local function float_toggle(ctx, label, options)
   local block = block_find(label)
+  local origin, anchor, window_id = popups_dismiss(ctx, label)
+  if block ~= nil and block.placement == 'placed' and block.window_id == window_id then
+    popup_dismiss(ctx, block)
+    return
+  end
+
+  popup_focus_origin[label] = origin
   if block == nil then
-    popup_focus_origin[label] = ctx.block_id
     popup_open(options, label)
     return
   end
 
-  if block.placement == 'placed' then
-    popup_focus_return(label)
-    local _, err = rex.session.detach_block { block_id = block.block_id }
-    if err ~= nil then
-      error(err, 0)
-    end
-    return
+  -- tab with only floats => nothing to split beside
+  if anchor == nil then
+    error('no tiled pane in this tab to place popup', 0)
   end
 
-  assert(ctx.block_id ~= block.block_id)
-  popup_focus_origin[label] = ctx.block_id
-
-  -- detached block can't float directly => place beside focused block, then float
-  local _, err = rex.session.move_block {
-    block_id = block.block_id,
-    anchor_block_id = ctx.block_id,
-  }
+  -- detached block can't float directly => split beside any tiled pane, then float out
+  local _, err = rex.session.move_block { block_id = block.block_id, anchor_block_id = anchor }
   if err ~= nil then
     error(err, 0)
   end
@@ -114,31 +163,13 @@ local function float_toggle(ctx, label, options)
   end
 end
 
--- open => close (lazygit keeps no state); none => open in focused pane's cwd
+-- open => close (lazygit keeps no state); none => open in cwd of pane the key was pressed in
 rex.action {
   name = 'lazygit_popup',
   title = 'Lazygit Popup',
   run = function(ctx, args)
-    local lazygit = block_find 'lazygit'
-
-    if lazygit ~= nil then
-      assert(ctx.session_id ~= nil)
-
-      popup_focus_return 'lazygit'
-
-      local _, err = rex.call('block.close', {
-        session_id = ctx.session_id,
-        block_id = lazygit.block_id,
-      })
-      if err ~= nil then
-        error(err, 0)
-      end
-
-      return
-    end
-
-    popup_focus_origin['lazygit'] = ctx.block_id
-    popup_open({ command = { 'lazygit' }, cwd = block_pwd(ctx) }, 'lazygit')
+    assert(ctx.session_id ~= nil)
+    float_toggle(ctx, 'lazygit', { command = { 'lazygit' }, cwd = block_pwd(ctx) })
   end,
 }
 
