@@ -1,12 +1,8 @@
 git:
-  pagers:
-    # dark; vesper diff bgs from tuicr/themes/vesper.toml
+  diffRenderers:
+    # {{colorScheme}} => terminal bg (rex answers OSC 11); {{width}} => bg fill stops at view edge
+    # bgs: vesper.nvim palette{,_light}.lua added/deleted blended 15% toward bg
     - colorArg: always
-      pager: >-
-        delta --paging=never --dark --line-numbers --syntax-theme=ansi
-        --plus-style='syntax "#102e2a"' --minus-style='syntax "#3a1f1f"'
-    # light; bgs from tuicr/themes/vesper-light.toml
-    - colorArg: always
-      pager: >-
-        delta --paging=never --light --line-numbers --syntax-theme=ansi
-        --plus-style='syntax "#dff0ea"' --minus-style='syntax "#f5dede"'
+      command: >-
+        delta --paging=never --{{colorScheme}} --line-numbers --syntax-theme=ansi --width={{width}}
+        {{if eq .colorScheme "light"}}--plus-style='syntax "#d8e9e4"' --minus-style='syntax "#f3dfdf"'{{else}}--plus-style='syntax "#253430"' --minus-style='syntax "#342121"'{{end}}
