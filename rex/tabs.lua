@@ -1,4 +1,4 @@
--- tab goto scoped to the ctx session; client.tab.goto indexes every session's tabs in the sidebar
+-- tab/session goto by index; client.tab.goto indexes every session's tabs in the sidebar
 local TAB_INDEX_MAX = 9
 
 -- tab `index` (1-based, session window order) => active tab; index past last tab => no-op like tmux
@@ -29,5 +29,36 @@ rex.action {
   title = 'Go to Tab in Session',
   run = function(ctx, args)
     tab_goto(ctx, args.index)
+  end,
+}
+
+local SESSION_INDEX_MAX = 9
+
+-- session `index` (1-based, session.list order = sidebar) => shown session, its last tab; past last => no-op
+local function session_goto(ctx, index)
+  assert(type(index) == 'number')
+  assert(index == math.floor(index))
+  assert(index >= 1)
+  assert(index <= SESSION_INDEX_MAX)
+
+  local result, err = rex.call('session.list', {})
+  if err ~= nil then
+    error(err, 0)
+  end
+
+  local session = (result.sessions or {})[index]
+  if session == nil then
+    return
+  end
+
+  assert(session.session_id ~= nil)
+  rex.client.queue('session.select', { session_id = session.session_id })
+end
+
+rex.action {
+  name = 'session_goto',
+  title = 'Go to Session',
+  run = function(ctx, args)
+    session_goto(ctx, args.index)
   end,
 }

@@ -90,8 +90,14 @@ rex.bind(PREFIX .. '>alt+right', 'pane.resize', { direction = 'right', amount = 
 for index = 1, 9 do
   rex.bind('alt+' .. index, 'tab_goto', { index = index })
 end
+-- sessions by sidebar position => tabs.lua
+for index = 1, 9 do
+  rex.bind('alt+shift+' .. index, 'session_goto', { index = index })
+end
 rex.bind('alt+n', 'client.tab.next')
 rex.bind('alt+p', 'client.tab.previous')
+rex.bind('alt+shift+n', 'session.next')
+rex.bind('alt+shift+p', 'session.previous')
 
 -- quick actions
 rex.bind(PREFIX .. '>x', 'pane.close')
