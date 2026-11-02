@@ -86,9 +86,9 @@ rex.bind(PREFIX .. '>alt+down', 'pane.resize', { direction = 'down', amount = 5 
 rex.bind(PREFIX .. '>alt+up', 'pane.resize', { direction = 'up', amount = 5 })
 rex.bind(PREFIX .. '>alt+right', 'pane.resize', { direction = 'right', amount = 5 })
 
--- tab navigation without prefix; tmux base-index 1
+-- tab navigation without prefix; tmux base-index 1; this session only => tabs.lua
 for index = 1, 9 do
-  rex.bind('alt+' .. index, 'client.tab.goto', { index = index })
+  rex.bind('alt+' .. index, 'tab_goto', { index = index })
 end
 rex.bind('alt+n', 'client.tab.next')
 rex.bind('alt+p', 'client.tab.previous')

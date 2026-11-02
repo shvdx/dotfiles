@@ -2,4 +2,5 @@
 require 'popups'
 require 'commands'
 require 'panes'
+require 'tabs'
 require 'keybinds'
