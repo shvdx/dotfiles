@@ -100,7 +100,8 @@ rex.bind('alt+shift+n', 'session.next')
 rex.bind('alt+shift+p', 'session.previous')
 
 -- quick actions
-rex.bind(PREFIX .. '>x', 'pane.close')
+-- rex.bind(PREFIX .. '>x', 'pane.close') -- => pane_close
+rex.bind(PREFIX .. '>x', 'pane_close')
 rex.bind(PREFIX .. '>shift+x', 'client.tab.close')
 rex.bind(PREFIX .. '>z', 'pane.zoom')
 

@@ -167,3 +167,18 @@ rex.action {
     pane_move(ctx, args.direction)
   end,
 }
+
+-- tmux kill-pane: last pane in tab => tab closes too; app pane.close keeps a tab's last pane
+rex.action {
+  name = 'pane_close',
+  title = 'Close Pane',
+  run = function(ctx, args)
+    assert(ctx.session_id ~= nil)
+    assert(ctx.block_id ~= nil)
+
+    local _, err = rex.call('block.close', { session_id = ctx.session_id, block_id = ctx.block_id })
+    if err ~= nil then
+      error(err, 0)
+    end
+  end,
+}
