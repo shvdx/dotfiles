@@ -104,6 +104,17 @@ rex.bind('alt+shift+p', 'session.previous')
 rex.bind(PREFIX .. '>x', 'pane_close')
 rex.bind(PREFIX .. '>shift+x', 'client.tab.close')
 rex.bind(PREFIX .. '>z', 'pane.zoom')
+rex.bind(PREFIX .. '>=', 'pane.balance')
+-- rex.bind(PREFIX .. '>f', 'pane.float') -- => pane_float
+rex.bind(PREFIX .. '>f', 'pane_float')
+rex.bind(PREFIX .. '>m', 'pane.minimize_floating')
+rex.bind(PREFIX .. '>shift+m', 'pane.minimize_all_floating')
+
+-- floating pane: ctrl => move, ctrl+shift => resize right/bottom edge => panes.lua
+for key, direction in pairs { h = 'left', j = 'down', k = 'up', l = 'right' } do
+  rex.bind(PREFIX .. '>ctrl+' .. key, 'float_nudge', { direction = direction, mode = 'move' })
+  rex.bind(PREFIX .. '>ctrl+shift+' .. key, 'float_nudge', { direction = direction, mode = 'resize' })
+end
 
 -- tmux M-k clear-history
 rex.bind('alt+k', 'com.superlogical.terminal.clear')
