@@ -4,6 +4,7 @@ local SHELL = consts.SHELL
 local SESSIONS_PATH = consts.SESSIONS_PATH
 local SESSIONS_MAX = consts.SESSIONS_MAX
 local LAYOUT_DEPTH_MAX = consts.LAYOUT_DEPTH_MAX
+local POPUP_LABELS = consts.POPUP_LABELS
 
 -- "1 session" / "3 sessions"
 local function sessions_count(count)
@@ -109,31 +110,57 @@ local function layout_save(node, blocks_by_id, session_id, depth)
   }
 end
 
--- one session => { label, initial_windows }; floating layers skipped (popups, scratch)
+-- layer's blocks => { [block_id] = block }
+local function layer_blocks_by_id(layer)
+  local blocks_by_id = {}
+  for _, block in ipairs(layer.blocks or {}) do
+    blocks_by_id[block.block_id] = block
+  end
+  return blocks_by_id
+end
+
+-- floating layer holding a popup => popups.lua owns it, not saved
+local function layer_is_popup(layer)
+  assert(layer.kind == 'floating')
+  for _, block in ipairs(layer.blocks or {}) do
+    if POPUP_LABELS[block.label] then
+      return true
+    end
+  end
+  return false
+end
+
+-- one session => { label, initial_windows, floats }; initial_windows => session.create as is;
+-- floats = { window = index into initial_windows, bounds, state, layout }; popups skipped
 local function session_save(session_id)
   local view, err = rex.session.view { session_id = session_id }
   if err ~= nil then
     error(err, 0)
   end
 
-  local windows = {}
+  local windows, floats = {}, {}
   for _, window in ipairs(view.windows or {}) do
+    -- view lists the tiled layer first => floats know their tab's index
+    local window_index = nil
     for _, layer in ipairs(window.layers or {}) do
-      if layer.kind == 'tiled' and layer.layout ~= nil then
-        local blocks_by_id = {}
-        for _, block in ipairs(layer.blocks or {}) do
-          blocks_by_id[block.block_id] = block
+      if layer.layout ~= nil then
+        local layout = layout_save(layer.layout, layer_blocks_by_id(layer), session_id, 1)
+        if layer.kind == 'tiled' then
+          table.insert(windows, { window_label = window.label, layout = layout })
+          window_index = #windows
+        else
+          -- tab without a tiled layout => not restored => its floats dropped
+          if window_index ~= nil then
+            if not layer_is_popup(layer) then
+              table.insert(floats, { window = window_index, bounds = layer.bounds, state = layer.state, layout = layout })
+            end
+          end
         end
-
-        table.insert(windows, {
-          window_label = window.label,
-          layout = layout_save(layer.layout, blocks_by_id, session_id, 1),
-        })
       end
     end
   end
 
-  return { label = view.label, initial_windows = windows }
+  return { label = view.label, initial_windows = windows, floats = floats }
 end
 
 -- action runs as the app's client => session ids it's attached to; detaching those cuts the app off
@@ -193,7 +220,7 @@ local function sessions_write(saved)
   assert(os.rename(path_tmp, SESSIONS_PATH))
 end
 
--- every session's tiled layout + each pane's cwd => SESSIONS_PATH
+-- every session's tabs, tiled layout, floats + each pane's cwd => SESSIONS_PATH
 rex.action {
   name = 'session_save',
   title = 'Save Sessions',
@@ -224,6 +251,48 @@ rex.action {
     return { saved = #saved, path = SESSIONS_PATH }
   end,
 }
+
+-- saved floats => floating layers on their restored tabs, back to front; new_layer needs an attached client;
+-- no detach => app may already be on the new session
+local function floats_restore(created, floats)
+  assert(created.session_id ~= nil)
+  if #floats == 0 then
+    return
+  end
+
+  local _, err = rex.call('session.attach', { session_id = created.session_id })
+  if err ~= nil then
+    error(err, 0)
+  end
+
+  for _, float in ipairs(floats) do
+    local window = created.initial_windows[float.window]
+    assert(window ~= nil)
+    assert(window.window_id ~= nil)
+
+    local layer, layer_err = rex.call('session.new_layer', {
+      session_id = created.session_id,
+      window_id = window.window_id,
+      bounds = float.bounds,
+      layout = float.layout,
+      focus = false,
+    })
+    if layer_err ~= nil then
+      error(layer_err, 0)
+    end
+
+    if float.state == 'minimized' then
+      local _, state_err = rex.call('session.set_layer_state', {
+        session_id = created.session_id,
+        layer_id = layer.layer_id,
+        state = 'minimized',
+      })
+      if state_err ~= nil then
+        error(state_err, 0)
+      end
+    end
+  end
+end
 
 -- recreate saved sessions; labels already live => skipped, so running twice never duplicates
 rex.action {
@@ -256,10 +325,13 @@ rex.action {
       if live[session.label] or #session.initial_windows == 0 then
         table.insert(skipped, session.label)
       else
-        local _, create_err = rex.call('session.create', session)
+        -- create rejects unknown keys => floats go in after
+        local created, create_err = rex.call('session.create', { label = session.label, initial_windows = session.initial_windows })
         if create_err ~= nil then
           error(session.label .. ': ' .. create_err, 0)
         end
+
+        floats_restore(created, session.floats or {})
 
         table.insert(restored, session.label)
       end

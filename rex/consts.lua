@@ -9,6 +9,8 @@ consts.TERMINAL = 'com.superlogical.terminal'
 -- tmux display-popup -w 92% -h 92%, centered; { x, y, w, h } fractions
 consts.POPUP_BOUNDS = { 0.04, 0.04, 0.92, 0.92 }
 consts.SCRATCH_LABEL = 'scratch'
+-- floating popups owned by popups.lua; tmux shows one at a time, session save skips them
+consts.POPUP_LABELS = { lazygit = true, tasks = true, [consts.SCRATCH_LABEL] = true }
 consts.TASKS_DIR = os.getenv 'HOME' .. '/recs'
 
 -- session save/restore

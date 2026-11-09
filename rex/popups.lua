@@ -74,7 +74,7 @@ local function popup_focus_return(label)
 end
 
 -- tmux shows one popup at a time
-local POPUP_LABELS = { lazygit = true, tasks = true, [SCRATCH_LABEL] = true }
+local POPUP_LABELS = consts.POPUP_LABELS
 
 -- focus back to opener first; lazygit => close (no state), others => detach (keep state)
 local function popup_dismiss(ctx, block)
