@@ -214,7 +214,13 @@ local function pane_float(ctx)
     return
   end
 
-  local rect = layer_layout(layer, ctx.block_id).rects[ctx.block_id]
+  local layout = layer_layout(layer, ctx.block_id)
+  -- only pane in tab => empty tiled layer => nothing to dock back beside
+  if layout.axis == nil then
+    return
+  end
+
+  local rect = layout.rects[ctx.block_id]
   local w, h = rect[3] * FLOAT_SCALE, rect[4] * FLOAT_SCALE
   local x, y = rect[1] + (rect[3] - w) / 2, rect[2] + (rect[4] - h) / 2
   assert(w > 0)
