@@ -1,3 +1,7 @@
+local consts = require 'consts'
+local SHELL = consts.SHELL
+local block_pwd = require('popups').block_pwd
+
 -- pane move: take focused pane out => new split beside a neighbor; rex pane.move swaps instead
 local LAYOUT_NODES_MAX = 64
 -- rects are fractions => float compare with slack
@@ -245,7 +249,7 @@ rex.action {
   end,
 }
 
--- float nudge step and min size, fractions of the tab
+-- float resize step and min size, fractions of the tab
 local FLOAT_STEP = 0.05
 local FLOAT_SIZE_MIN = 0.1
 assert(FLOAT_STEP > 0)
@@ -256,32 +260,22 @@ local function clamp(value, low, high)
   return math.max(low, math.min(high, value))
 end
 
--- move => shift by FLOAT_STEP, size kept; resize => right/bottom edge by FLOAT_STEP; clamped inside tab;
--- tiled / detached pane => no-op
-local function float_nudge(ctx, direction, mode)
-  local spec = DIRECTIONS[direction]
-  assert(spec ~= nil)
-  assert(mode == 'move' or mode == 'resize')
+-- floating layer holding ctx pane => layer; tiled / detached => nil
+local function float_layer(ctx)
   assert(ctx.session_id ~= nil)
   assert(ctx.block_id ~= nil)
 
   local layer = layer_find(ctx.session_id, ctx.block_id)
   if layer == nil then
-    return
+    return nil
   end
   if layer.kind ~= 'floating' then
-    return
+    return nil
   end
+  return layer
+end
 
-  local x, y, w, h = layer.bounds[1], layer.bounds[2], layer.bounds[3], layer.bounds[4]
-  if mode == 'move' then
-    x = clamp(x + spec.step[1] * FLOAT_STEP, 0, 1 - w)
-    y = clamp(y + spec.step[2] * FLOAT_STEP, 0, 1 - h)
-  else
-    -- already under FLOAT_SIZE_MIN => current size is the floor
-    w = clamp(w + spec.step[1] * FLOAT_STEP, math.min(FLOAT_SIZE_MIN, w), 1 - x)
-    h = clamp(h + spec.step[2] * FLOAT_STEP, math.min(FLOAT_SIZE_MIN, h), 1 - y)
-  end
+local function float_bounds_set(ctx, layer, x, y, w, h)
   assert(w > 0)
   assert(h > 0)
   assert(x >= 0)
@@ -299,10 +293,104 @@ local function float_nudge(ctx, direction, mode)
   end
 end
 
+-- right/bottom edge by FLOAT_STEP, x/y kept; clamped inside tab; tiled pane => no-op
+local function float_resize(ctx, direction)
+  local spec = DIRECTIONS[direction]
+  assert(spec ~= nil)
+
+  local layer = float_layer(ctx)
+  if layer == nil then
+    return
+  end
+
+  local x, y, w, h = layer.bounds[1], layer.bounds[2], layer.bounds[3], layer.bounds[4]
+  -- already under FLOAT_SIZE_MIN => current size is the floor
+  w = clamp(w + spec.step[1] * FLOAT_STEP, math.min(FLOAT_SIZE_MIN, w), 1 - x)
+  h = clamp(h + spec.step[2] * FLOAT_STEP, math.min(FLOAT_SIZE_MIN, h), 1 - y)
+  float_bounds_set(ctx, layer, x, y, w, h)
+end
+
 rex.action {
-  name = 'float_nudge',
-  title = 'Move or Resize Floating Pane',
+  name = 'float_resize',
+  title = 'Resize Floating Pane',
   run = function(ctx, args)
-    float_nudge(ctx, args.direction, args.mode)
+    float_resize(ctx, args.direction)
+  end,
+}
+
+-- float area = tab minus equal padding on every side; positions tile this area
+local FLOAT_AREA = 0.9
+local FLOAT_PADDING = (1 - FLOAT_AREA) / 2
+assert(FLOAT_AREA > 0)
+assert(FLOAT_AREA <= 1)
+
+-- position => { x0, y0, x1, y1 } span of FLOAT_AREA; center => whole, halves, quarters
+local FLOAT_POSITIONS = {
+  center = { 0, 0, 1, 1 },
+  top = { 0, 0, 1, 0.5 },
+  bottom = { 0, 0.5, 1, 1 },
+  left = { 0, 0, 0.5, 1 },
+  right = { 0.5, 0, 1, 1 },
+  top_left = { 0, 0, 0.5, 0.5 },
+  top_right = { 0.5, 0, 1, 0.5 },
+  bottom_left = { 0, 0.5, 0.5, 1 },
+  bottom_right = { 0.5, 0.5, 1, 1 },
+}
+
+-- `position` => { x, y, w, h } fractions of the tab
+local function float_position_bounds(position)
+  local span = FLOAT_POSITIONS[position]
+  assert(span ~= nil)
+  assert(span[1] < span[3])
+  assert(span[2] < span[4])
+
+  return {
+    FLOAT_PADDING + span[1] * FLOAT_AREA,
+    FLOAT_PADDING + span[2] * FLOAT_AREA,
+    (span[3] - span[1]) * FLOAT_AREA,
+    (span[4] - span[2]) * FLOAT_AREA,
+  }
+end
+
+-- snap float to `position` (center / half / quarter of FLOAT_AREA); tiled pane => no-op
+local function float_place(ctx, position)
+  local bounds = float_position_bounds(position)
+
+  local layer = float_layer(ctx)
+  if layer == nil then
+    return
+  end
+
+  float_bounds_set(ctx, layer, bounds[1], bounds[2], bounds[3], bounds[4])
+end
+
+rex.action {
+  name = 'float_place',
+  title = 'Place Floating Pane',
+  run = function(ctx, args)
+    float_place(ctx, args.position)
+  end,
+}
+
+-- new shell float at `center` position, in ctx pane's cwd; ctx pane gone / no cwd => shell default
+local function float_new(ctx)
+  assert(ctx.session_id ~= nil)
+
+  local _, err = rex.call('session.new_layer', {
+    session_id = ctx.session_id,
+    bounds = float_position_bounds 'center',
+    focus = true,
+    layout = { block = { flavor = SHELL, options = { cwd = block_pwd(ctx) } } },
+  })
+  if err ~= nil then
+    error(err, 0)
+  end
+end
+
+rex.action {
+  name = 'float_new',
+  title = 'New Centered Float',
+  run = function(ctx, args)
+    float_new(ctx)
   end,
 }

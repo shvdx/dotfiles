@@ -195,3 +195,5 @@ rex.action {
     float_toggle(ctx, SCRATCH_LABEL, {})
   end,
 }
+
+return { block_pwd = block_pwd }

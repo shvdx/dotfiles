@@ -110,10 +110,25 @@ rex.bind(PREFIX .. '>f', 'pane_float')
 rex.bind(PREFIX .. '>m', 'pane.minimize_floating')
 rex.bind(PREFIX .. '>shift+m', 'pane.minimize_all_floating')
 
--- floating pane: ctrl => move, ctrl+shift => resize right/bottom edge => panes.lua
+rex.bind(PREFIX .. '>shift+f', 'float_new')
+
+-- floating pane snap: ctrl+hjkl => halves, ctrl+yubn => quarters, ctrl+c => center => panes.lua
+for key, position in pairs {
+  h = 'left',
+  j = 'bottom',
+  k = 'top',
+  l = 'right',
+  y = 'top_left',
+  u = 'top_right',
+  b = 'bottom_left',
+  n = 'bottom_right',
+  c = 'center',
+} do
+  rex.bind(PREFIX .. '>ctrl+' .. key, 'float_place', { position = position })
+end
+-- floating pane: ctrl+shift+hjkl => resize right/bottom edge
 for key, direction in pairs { h = 'left', j = 'down', k = 'up', l = 'right' } do
-  rex.bind(PREFIX .. '>ctrl+' .. key, 'float_nudge', { direction = direction, mode = 'move' })
-  rex.bind(PREFIX .. '>ctrl+shift+' .. key, 'float_nudge', { direction = direction, mode = 'resize' })
+  rex.bind(PREFIX .. '>ctrl+shift+' .. key, 'float_resize', { direction = direction })
 end
 
 -- tmux M-k clear-history
