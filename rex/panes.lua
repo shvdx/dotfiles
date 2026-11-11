@@ -324,6 +324,31 @@ local FLOAT_PADDING = (1 - FLOAT_AREA) / 2
 assert(FLOAT_AREA > 0)
 assert(FLOAT_AREA <= 1)
 
+-- tmux `bind -r`: first press acts, then mode `name` keeps its keys live until esc
+local function repeat_mode_enter(name)
+  assert(name == 'resize' or name == 'float_resize')
+  rex.client.queue('client.mode.enter', { name = name })
+end
+
+rex.action {
+  name = 'pane_resize_repeat',
+  title = 'Resize Pane, Keep Resizing',
+  run = function(ctx, args)
+    assert(DIRECTIONS[args.direction] ~= nil)
+    rex.client.queue('pane.resize', { direction = args.direction, amount = 5 })
+    repeat_mode_enter 'resize'
+  end,
+}
+
+rex.action {
+  name = 'float_resize_repeat',
+  title = 'Resize Floating Pane, Keep Resizing',
+  run = function(ctx, args)
+    float_resize(ctx, args.direction)
+    repeat_mode_enter 'float_resize'
+  end,
+}
+
 -- position => { x0, y0, x1, y1 } span of FLOAT_AREA; center => whole, halves, quarters
 local FLOAT_POSITIONS = {
   center = { 0, 0, 1, 1 },

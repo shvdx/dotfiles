@@ -80,11 +80,22 @@ rex.bind('alt+shift+j', 'pane.resize', { direction = 'down', amount = 5 })
 rex.bind('alt+shift+k', 'pane.resize', { direction = 'up', amount = 5 })
 rex.bind('alt+shift+l', 'pane.resize', { direction = 'right', amount = 5 })
 
--- resize with prefix (alt+arrows); one step per prefix
-rex.bind(PREFIX .. '>alt+left', 'pane.resize', { direction = 'left', amount = 5 })
-rex.bind(PREFIX .. '>alt+down', 'pane.resize', { direction = 'down', amount = 5 })
-rex.bind(PREFIX .. '>alt+up', 'pane.resize', { direction = 'up', amount = 5 })
-rex.bind(PREFIX .. '>alt+right', 'pane.resize', { direction = 'right', amount = 5 })
+-- resize with prefix (alt+arrows); first step, then `resize` mode repeats until esc => panes.lua
+-- rex.bind(PREFIX .. '>alt+left', 'pane.resize', { direction = 'left', amount = 5 }) -- => pane_resize_repeat
+-- rex.bind(PREFIX .. '>alt+down', 'pane.resize', { direction = 'down', amount = 5 }) -- => pane_resize_repeat
+-- rex.bind(PREFIX .. '>alt+up', 'pane.resize', { direction = 'up', amount = 5 }) -- => pane_resize_repeat
+-- rex.bind(PREFIX .. '>alt+right', 'pane.resize', { direction = 'right', amount = 5 }) -- => pane_resize_repeat
+rex.mode('resize', { exclusive = true })
+for _, direction in ipairs { 'left', 'down', 'up', 'right' } do
+  rex.bind(PREFIX .. '>alt+' .. direction, 'pane_resize_repeat', { direction = direction })
+  rex.bind('resize/' .. direction, 'pane.resize', { direction = direction, amount = 5 })
+  rex.bind('resize/alt+' .. direction, 'pane.resize', { direction = direction, amount = 5 })
+end
+for key, direction in pairs { h = 'left', j = 'down', k = 'up', l = 'right' } do
+  rex.bind('resize/' .. key, 'pane.resize', { direction = direction, amount = 5 })
+end
+rex.bind('resize/=', 'pane.balance')
+rex.bind('resize/enter', 'client.mode.exit')
 
 -- tab navigation without prefix; tmux base-index 1; this session only => tabs.lua
 for index = 1, 9 do
@@ -126,10 +137,15 @@ for key, position in pairs {
 } do
   rex.bind(PREFIX .. '>ctrl+' .. key, 'float_place', { position = position })
 end
--- floating pane: ctrl+shift+hjkl => resize right/bottom edge
+-- floating pane: ctrl+shift+hjkl => resize right/bottom edge, then `float_resize` mode repeats until esc
+rex.mode('float_resize', { exclusive = true })
 for key, direction in pairs { h = 'left', j = 'down', k = 'up', l = 'right' } do
-  rex.bind(PREFIX .. '>ctrl+shift+' .. key, 'float_resize', { direction = direction })
+  rex.bind(PREFIX .. '>ctrl+shift+' .. key, 'float_resize_repeat', { direction = direction })
+  rex.bind('float_resize/' .. key, 'float_resize', { direction = direction })
+  rex.bind('float_resize/ctrl+shift+' .. key, 'float_resize', { direction = direction })
+  rex.bind('float_resize/' .. direction, 'float_resize', { direction = direction })
 end
+rex.bind('float_resize/enter', 'client.mode.exit')
 
 -- tmux M-k clear-history
 rex.bind('alt+k', 'com.superlogical.terminal.clear')
