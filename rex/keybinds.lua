@@ -123,6 +123,16 @@ rex.bind(PREFIX .. '>shift+m', 'pane.minimize_all_floating')
 
 rex.bind(PREFIX .. '>shift+f', 'float_new')
 
+-- tmux defaults: `!` break-pane, `o` next pane, `w` choose-tree; `<` `>` => swap-window -t -1/+1
+rex.bind(PREFIX .. '>shift+1', 'pane.move_to_new_tab')
+rex.bind(PREFIX .. '>o', 'pane.focus_next')
+rex.bind(PREFIX .. '>w', 'pane.go_to')
+rex.bind(PREFIX .. '>shift+,', 'client.tab.move.backward')
+rex.bind(PREFIX .. '>shift+.', 'client.tab.move.forward')
+
+-- tmux copy-mode-vi; v / ctrl+v / y / $ match tmux.conf; `_` => `0` or `^` in rex
+rex.bind(PREFIX .. '>[', 'pane.copy_mode.enter')
+
 -- floating pane snap: ctrl+hjkl => halves, ctrl+yubn => quarters, ctrl+c => center => panes.lua
 for key, position in pairs {
   h = 'left',

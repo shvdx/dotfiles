@@ -313,6 +313,8 @@ end
 rex.action {
   name = 'float_resize',
   title = 'Resize Floating Pane',
+  -- held key => runs again per key repeat
+  repeats = true,
   run = function(ctx, args)
     float_resize(ctx, args.direction)
   end,
