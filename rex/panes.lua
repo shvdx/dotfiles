@@ -1,5 +1,6 @@
 local consts = require 'consts'
 local SHELL = consts.SHELL
+local TERMINAL = consts.TERMINAL
 local block_pwd = require('popups').block_pwd
 
 -- pane move: take focused pane out => new split beside a neighbor; rex pane.move swaps instead
@@ -419,5 +420,121 @@ rex.action {
   title = 'New Centered Float',
   run = function(ctx, args)
     float_new(ctx)
+  end,
+}
+
+-- float's palette title: terminal title (cwd / running program); else label; else 'float'
+local function float_pick_title(block)
+  assert(block.block_id ~= nil)
+  local result = rex.block.call(TERMINAL, 'title', { block_id = block.block_id })
+  if result ~= nil and result.title ~= nil and result.title ~= '' then
+    return result.title
+  end
+  return block.label or 'float'
+end
+
+-- active tab's floating layers => rex.ui.pick items, stack order; id = layer_id
+local function float_pick_items(view)
+  local items = {}
+  for _, window in ipairs(view.windows or {}) do
+    if window.window_id == view.active_window_id then
+      for _, layer in ipairs(window.layers or {}) do
+        local block = (layer.blocks or {})[1]
+        if layer.kind == 'floating' and block ~= nil then
+          assert(layer.layer_id ~= nil)
+          local detail = nil
+          if layer.state == 'minimized' then
+            detail = 'minimized'
+          end
+          table.insert(items, { id = layer.layer_id, title = float_pick_title(block), subtitle = block.label, detail = detail, icon = 'terminal' })
+        end
+      end
+    end
+  end
+  return items
+end
+
+-- floating layer => normal, raised, its last focused block focused, its window active
+local function float_layer_focus(session_id, layer_id)
+  assert(session_id ~= nil)
+  assert(layer_id ~= nil)
+
+  local _, err = rex.call('session.set_layer_state', {
+    session_id = session_id,
+    layer_id = layer_id,
+    state = 'normal',
+    focus = true,
+  })
+  if err ~= nil then
+    error(err, 0)
+  end
+end
+
+-- `window_id`'s focused block; window gone => nil
+local function window_focused_block_id(session_id, window_id)
+  local view, err = rex.call('session.view', { session_id = session_id })
+  if err ~= nil then
+    error(err, 0)
+  end
+
+  for _, window in ipairs(view.windows or {}) do
+    if window.window_id == window_id then
+      return window.focused_block_id
+    end
+  end
+  return nil
+end
+
+-- palette closes after pick returns => app refocuses the pane it opened over; poll 0.05s x 40 => 2s max
+local FLOAT_PICK_POLL_S = 0.05
+local FLOAT_PICK_POLL_COUNT_MAX = 40
+assert(FLOAT_PICK_POLL_S * FLOAT_PICK_POLL_COUNT_MAX <= 2)
+
+-- wait for palette close to hand focus back to `opener_block_id` => focus float again; none within 2s => done
+local function float_pick_refocus(session_id, window_id, layer_id, opener_block_id)
+  assert(opener_block_id ~= nil)
+
+  for _ = 1, FLOAT_PICK_POLL_COUNT_MAX do
+    -- rex.exec => server keeps handling keys while this action waits
+    rex.exec({ 'sleep', tostring(FLOAT_PICK_POLL_S) }, { timeout = 5 })
+    if window_focused_block_id(session_id, window_id) == opener_block_id then
+      float_layer_focus(session_id, layer_id)
+      return
+    end
+  end
+end
+
+-- palette list of the tab's floats => chosen one back to normal, raised + focused; no floats => no prompt
+local function float_pick(ctx)
+  assert(ctx.session_id ~= nil)
+
+  local view, err = rex.call('session.view', { session_id = ctx.session_id })
+  if err ~= nil then
+    error(err, 0)
+  end
+
+  local items = float_pick_items(view)
+  if #items == 0 then
+    return
+  end
+
+  local layer_id, why = rex.ui.pick { title = 'Floating panes', placeholder = 'Filter floats', items = items, confirm = 'Show' }
+  if layer_id == nil then
+    if why ~= 'cancelled' then
+      rex.log('warn', 'float_pick: ' .. tostring(why))
+    end
+    return
+  end
+  assert(type(layer_id) == 'string')
+
+  float_layer_focus(ctx.session_id, layer_id)
+  float_pick_refocus(ctx.session_id, view.active_window_id, layer_id, ctx.block_id)
+end
+
+rex.action {
+  name = 'float_pick',
+  title = 'Pick Floating Pane',
+  run = function(ctx, args)
+    float_pick(ctx)
   end,
 }

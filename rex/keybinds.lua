@@ -132,6 +132,11 @@ rex.bind(PREFIX .. '>shift+.', 'client.tab.move.forward')
 
 -- tmux copy-mode-vi; v / ctrl+v / y / $ match tmux.conf; `_` => `0` or `^` in rex
 rex.bind(PREFIX .. '>[', 'pane.copy_mode.enter')
+-- tmux.conf `_` start-of-line; mode name `copy_mode` unverified => app may not route it
+rex.bind('copy_mode/shift+-', 'pane.copy_mode.move', { to = 'line_start' })
+
+-- floats of this tab, minimized too => palette pick => shown + focused => panes.lua
+rex.bind(PREFIX .. '>shift+w', 'float_pick')
 
 -- floating pane snap: ctrl+hjkl => halves, ctrl+yubn => quarters, ctrl+c => center => panes.lua
 for key, position in pairs {
