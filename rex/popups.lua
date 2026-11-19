@@ -54,31 +54,34 @@ local function block_find(label)
   return nil
 end
 
--- popup label => pane focused before it opened; rex refocuses an arbitrary pane on hide/close;
--- program exiting on its own (q, :q, exit) => rex picks focus; config can't observe block exit
-local popup_focus_origin = {}
-
--- refocus pane that opened `label`; call before hide/close => popup unfocused => rex keeps focus;
--- pane may be gone since => only logged
-local function popup_focus_return(label)
-  local block_id = popup_focus_origin[label]
-  popup_focus_origin[label] = nil
-  if block_id == nil then
-    return
+-- config can't observe block exit => `argv` exits (q, :q) => popup's own shell runs pane_focus_tiled
+-- while the block still lives => tiled pane focused before rex picks one on close
+local function popup_command(argv)
+  assert(#argv > 0)
+  local command = { '/bin/sh', '-c', '"$@"; rex do pane_focus_tiled', 'popup' }
+  for _, arg in ipairs(argv) do
+    table.insert(command, arg)
   end
-
-  local _, err = rex.session.focus_block { block_id = block_id }
-  if err ~= nil then
-    rex.log('warn', 'popup focus return: ' .. err)
-  end
+  return command
 end
 
 -- tmux shows one popup at a time
 local POPUP_LABELS = consts.POPUP_LABELS
 
--- focus back to opener first; lazygit => close (no state), others => detach (keep state)
-local function popup_dismiss(ctx, block)
-  popup_focus_return(block.label)
+-- rex refocuses an arbitrary pane on close/hide => tiled layer focused first (its last focused pane)
+-- => popup unfocused => rex keeps focus; lazygit => close (no state), others => detach (keep state)
+local function popup_dismiss(ctx, block, tiled_layer_id)
+  if tiled_layer_id ~= nil then
+    local _, focus_err = rex.call('session.set_layer_state', {
+      session_id = ctx.session_id,
+      layer_id = tiled_layer_id,
+      state = 'normal',
+      focus = true,
+    })
+    if focus_err ~= nil then
+      error(focus_err, 0)
+    end
+  end
 
   local _, err
   if block.label == 'lazygit' then
@@ -93,49 +96,43 @@ local function popup_dismiss(ctx, block)
 end
 
 -- dismiss active tab's popups except `keep_label`
--- => opener of dismissed popup; else ctx pane, first tiled pane (move_block anchor), active tab
+-- => first tiled pane (move_block anchor), tiled layer, active tab; no tiled panes => nil, nil
 local function popups_dismiss(ctx, keep_label)
   local view, err = rex.call('session.view', { session_id = ctx.session_id })
   if err ~= nil then
     error(err, 0)
   end
 
-  local origin, anchor, dismissed = nil, nil, false
+  -- view lists the tiled layer first => tiled_layer_id set before any popup is dismissed
+  local anchor, tiled_layer_id = nil, nil
   for _, window in ipairs(view.windows or {}) do
     if window.window_id == view.active_window_id then
       for _, layer in ipairs(window.layers or {}) do
         for _, block in ipairs(layer.blocks or {}) do
           if layer.kind == 'tiled' then
             anchor = anchor or block.block_id
+            tiled_layer_id = layer.layer_id
           elseif POPUP_LABELS[block.label] and block.label ~= keep_label then
-            origin = origin or popup_focus_origin[block.label]
-            dismissed = true
-            popup_dismiss(ctx, block)
+            popup_dismiss(ctx, block, tiled_layer_id)
           end
         end
       end
     end
   end
 
-  -- none dismissed => ctx pane alive; opener lost (reload) => ctx may be closed => tiled pane
-  if not dismissed then
-    origin = ctx.block_id
-  end
-
-  return origin or anchor, anchor, view.active_window_id
+  return anchor, tiled_layer_id, view.active_window_id
 end
 
 -- popup that keeps running: placed here => dismiss; detached or in another tab => float here;
 -- none => create
 local function float_toggle(ctx, label, options)
   local block = block_find(label)
-  local origin, anchor, window_id = popups_dismiss(ctx, label)
+  local anchor, tiled_layer_id, window_id = popups_dismiss(ctx, label)
   if block ~= nil and block.placement == 'placed' and block.window_id == window_id then
-    popup_dismiss(ctx, block)
+    popup_dismiss(ctx, block, tiled_layer_id)
     return
   end
 
-  popup_focus_origin[label] = origin
   if block == nil then
     popup_open(options, label)
     return
@@ -169,7 +166,7 @@ rex.action {
   title = 'Lazygit Popup',
   run = function(ctx, args)
     assert(ctx.session_id ~= nil)
-    float_toggle(ctx, 'lazygit', { command = { 'lazygit' }, cwd = block_pwd(ctx) })
+    float_toggle(ctx, 'lazygit', { command = popup_command { 'lazygit' }, cwd = block_pwd(ctx) })
   end,
 }
 
@@ -183,7 +180,7 @@ rex.action {
       error(mkdir.stderr, 0)
     end
 
-    float_toggle(ctx, 'tasks', { command = { 'nvim', 'tasks.md' }, cwd = TASKS_DIR })
+    float_toggle(ctx, 'tasks', { command = popup_command { 'nvim', 'tasks.md' }, cwd = TASKS_DIR })
   end,
 }
 

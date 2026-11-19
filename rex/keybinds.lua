@@ -118,8 +118,11 @@ rex.bind(PREFIX .. '>z', 'pane.zoom')
 rex.bind(PREFIX .. '>=', 'pane.balance')
 -- rex.bind(PREFIX .. '>f', 'pane.float') -- => pane_float
 rex.bind(PREFIX .. '>f', 'pane_float')
-rex.bind(PREFIX .. '>m', 'pane.minimize_floating')
-rex.bind(PREFIX .. '>shift+m', 'pane.minimize_all_floating')
+-- rex.bind(PREFIX .. '>m', 'pane.minimize_floating') -- => float_minimize
+-- rex.bind(PREFIX .. '>shift+m', 'pane.minimize_all_floating') -- => float_minimize_all
+-- minimize => focus back on the tiled pane left for the float => panes.lua
+rex.bind(PREFIX .. '>m', 'float_minimize')
+rex.bind(PREFIX .. '>shift+m', 'float_minimize_all')
 
 rex.bind(PREFIX .. '>shift+f', 'float_new')
 
@@ -175,6 +178,8 @@ rex.bind(PREFIX .. '>shift+l', 'session.previous')
 -- tmux defaults: `,` rename-window, `$` rename-session (shift+4 on US layout)
 rex.bind(PREFIX .. '>,', 'client.tab.rename')
 rex.bind(PREFIX .. '>shift+4', 'session.rename')
+-- pane name => float_pick rows
+rex.bind(PREFIX .. '>.', 'pane.rename')
 
 -- save all sessions => ~/.local/state/rex-sessions.json
 rex.bind(PREFIX .. '>ctrl+s', 'session_save')

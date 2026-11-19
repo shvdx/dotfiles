@@ -29,7 +29,7 @@ local function layer_find(session_id, block_id)
         if block.block_id == block_id then
           assert(layer.layer_id ~= nil)
           assert(layer.kind == 'tiled' or layer.kind == 'floating')
-          return layer
+          return layer, window
         end
       end
     end
@@ -423,18 +423,33 @@ rex.action {
   end,
 }
 
--- float's palette title: terminal title (cwd / running program); else label; else 'float'
-local function float_pick_title(block)
+-- float's palette row: renamed label; else foreground program; its cwd, home => ~, as subtitle
+local function float_pick_item(session_id, block)
+  assert(session_id ~= nil)
   assert(block.block_id ~= nil)
-  local result = rex.block.call(TERMINAL, 'title', { block_id = block.block_id })
-  if result ~= nil and result.title ~= nil and result.title ~= '' then
-    return result.title
+
+  local process = rex.call('block.method', { session_id = session_id, block_id = block.block_id, method = 'process' })
+  local foreground = {}
+  if process ~= nil and process.foreground ~= nil then
+    foreground = process.foreground
   end
-  return block.label or 'float'
+
+  -- new shell blocks start labelled 'shell' => anything else came from pane.rename
+  local title = foreground.name or 'float'
+  if block.label ~= nil and block.label ~= 'shell' then
+    title = block.label
+  end
+
+  local cwd = foreground.cwd
+  if cwd ~= nil and process.home ~= nil and cwd:sub(1, #process.home) == process.home then
+    cwd = '~' .. cwd:sub(#process.home + 1)
+  end
+  return { title = title, subtitle = cwd }
 end
 
 -- active tab's floating layers => rex.ui.pick items, stack order; id = layer_id
-local function float_pick_items(view)
+local function float_pick_items(session_id, view)
+  assert(session_id ~= nil)
   local items = {}
   for _, window in ipairs(view.windows or {}) do
     if window.window_id == view.active_window_id then
@@ -446,7 +461,8 @@ local function float_pick_items(view)
           if layer.state == 'minimized' then
             detail = 'minimized'
           end
-          table.insert(items, { id = layer.layer_id, title = float_pick_title(block), subtitle = block.label, detail = detail, icon = 'terminal' })
+          local row = float_pick_item(session_id, block)
+          table.insert(items, { id = layer.layer_id, title = row.title, subtitle = row.subtitle, detail = detail, icon = 'terminal' })
         end
       end
     end
@@ -454,8 +470,8 @@ local function float_pick_items(view)
   return items
 end
 
--- floating layer => normal, raised, its last focused block focused, its window active
-local function float_layer_focus(session_id, layer_id)
+-- layer => normal, raised, its last focused block focused, its window active; tiled layer too
+local function layer_focus(session_id, layer_id)
   assert(session_id ~= nil)
   assert(layer_id ~= nil)
 
@@ -498,7 +514,7 @@ local function float_pick_refocus(session_id, window_id, layer_id, opener_block_
     -- rex.exec => server keeps handling keys while this action waits
     rex.exec({ 'sleep', tostring(FLOAT_PICK_POLL_S) }, { timeout = 5 })
     if window_focused_block_id(session_id, window_id) == opener_block_id then
-      float_layer_focus(session_id, layer_id)
+      layer_focus(session_id, layer_id)
       return
     end
   end
@@ -513,7 +529,7 @@ local function float_pick(ctx)
     error(err, 0)
   end
 
-  local items = float_pick_items(view)
+  local items = float_pick_items(ctx.session_id, view)
   if #items == 0 then
     return
   end
@@ -527,7 +543,7 @@ local function float_pick(ctx)
   end
   assert(type(layer_id) == 'string')
 
-  float_layer_focus(ctx.session_id, layer_id)
+  layer_focus(ctx.session_id, layer_id)
   float_pick_refocus(ctx.session_id, view.active_window_id, layer_id, ctx.block_id)
 end
 
@@ -536,5 +552,85 @@ rex.action {
   title = 'Pick Floating Pane',
   run = function(ctx, args)
     float_pick(ctx)
+  end,
+}
+
+-- window's tiled layer; no tiled panes => nil
+local function window_tiled_layer_id(window)
+  for _, layer in ipairs(window.layers or {}) do
+    if layer.kind == 'tiled' and #(layer.blocks or {}) > 0 then
+      return layer.layer_id
+    end
+  end
+  return nil
+end
+
+-- server picks focus on minimize/close, not the pane left for the float => focus tiled layer first,
+-- its last focused pane takes focus; then the float minimizes/closes without focus
+local function window_focus_tiled(session_id, window)
+  local tiled_layer_id = window_tiled_layer_id(window)
+  if tiled_layer_id ~= nil then
+    layer_focus(session_id, tiled_layer_id)
+  end
+end
+
+-- focused float => tiled pane focused, float minimized; tiled pane => app pane.minimize_floating
+local function float_minimize(ctx)
+  assert(ctx.session_id ~= nil)
+  assert(ctx.block_id ~= nil)
+
+  local layer, window = layer_find(ctx.session_id, ctx.block_id)
+  if layer == nil then
+    return
+  end
+  if layer.kind == 'tiled' then
+    rex.client.queue('pane.minimize_floating', {})
+    return
+  end
+
+  window_focus_tiled(ctx.session_id, window)
+  local _, err = rex.call('session.set_layer_state', { session_id = ctx.session_id, layer_id = layer.layer_id, state = 'minimized' })
+  if err ~= nil then
+    error(err, 0)
+  end
+end
+
+rex.action {
+  name = 'float_minimize',
+  title = 'Minimize Floating Pane, Focus Tiled',
+  run = function(ctx, args)
+    float_minimize(ctx)
+  end,
+}
+
+-- focused float => tiled pane focused first; then app minimizes all floats
+rex.action {
+  name = 'float_minimize_all',
+  title = 'Minimize All Floating Panes, Focus Tiled',
+  run = function(ctx, args)
+    assert(ctx.session_id ~= nil)
+    assert(ctx.block_id ~= nil)
+
+    local layer, window = layer_find(ctx.session_id, ctx.block_id)
+    if layer ~= nil and layer.kind == 'floating' then
+      window_focus_tiled(ctx.session_id, window)
+    end
+    rex.client.queue('pane.minimize_all_floating', {})
+  end,
+}
+
+-- popups.lua popup_command => popup's program exited, its block about to close
+rex.action {
+  name = 'pane_focus_tiled',
+  title = 'Focus Tiled Pane',
+  run = function(ctx, args)
+    assert(ctx.session_id ~= nil)
+    assert(ctx.block_id ~= nil)
+
+    local layer, window = layer_find(ctx.session_id, ctx.block_id)
+    if layer == nil then
+      return
+    end
+    window_focus_tiled(ctx.session_id, window)
   end,
 }
