@@ -1,6 +1,7 @@
 local consts = require 'consts'
 local SHELL = consts.SHELL
 local TERMINAL = consts.TERMINAL
+local POPUP_BOUNDS = consts.POPUP_BOUNDS
 local block_pwd = require('popups').block_pwd
 
 -- pane move: take focused pane out => new split beside a neighbor; rex pane.move swaps instead
@@ -204,6 +205,16 @@ local FLOAT_SCALE = 0.85
 assert(FLOAT_SCALE > 0)
 assert(FLOAT_SCALE <= 1)
 
+-- float bounds, fractions of the tab => positive size, fully inside the tab
+local function bounds_assert(x, y, w, h)
+  assert(w > 0)
+  assert(h > 0)
+  assert(x >= 0)
+  assert(y >= 0)
+  assert(x + w <= 1 + EPSILON)
+  assert(y + h <= 1 + EPSILON)
+end
+
 -- tiled => float over its own rect, scaled FLOAT_SCALE about its center;
 -- floating => app pane.float docks it back
 local function pane_float(ctx)
@@ -228,12 +239,7 @@ local function pane_float(ctx)
   local rect = layout.rects[ctx.block_id]
   local w, h = rect[3] * FLOAT_SCALE, rect[4] * FLOAT_SCALE
   local x, y = rect[1] + (rect[3] - w) / 2, rect[2] + (rect[4] - h) / 2
-  assert(w > 0)
-  assert(h > 0)
-  assert(x >= 0)
-  assert(y >= 0)
-  assert(x + w <= 1 + EPSILON)
-  assert(y + h <= 1 + EPSILON)
+  bounds_assert(x, y, w, h)
 
   -- float_block keeps focus => pressed pane stays focused
   local _, err = rex.call('session.float_block', { session_id = ctx.session_id, block_id = ctx.block_id, bounds = { x, y, w, h } })
@@ -251,7 +257,7 @@ rex.action {
 }
 
 -- float resize step and min size, fractions of the tab
-local FLOAT_STEP = 0.05
+local FLOAT_STEP = 0.025
 local FLOAT_SIZE_MIN = 0.1
 assert(FLOAT_STEP > 0)
 assert(FLOAT_SIZE_MIN > 0)
@@ -261,28 +267,23 @@ local function clamp(value, low, high)
   return math.max(low, math.min(high, value))
 end
 
--- floating layer holding ctx pane => layer; tiled / detached => nil
+-- floating layer holding ctx pane => layer, its window; tiled / detached => nil
 local function float_layer(ctx)
   assert(ctx.session_id ~= nil)
   assert(ctx.block_id ~= nil)
 
-  local layer = layer_find(ctx.session_id, ctx.block_id)
+  local layer, window = layer_find(ctx.session_id, ctx.block_id)
   if layer == nil then
     return nil
   end
   if layer.kind ~= 'floating' then
     return nil
   end
-  return layer
+  return layer, window
 end
 
 local function float_bounds_set(ctx, layer, x, y, w, h)
-  assert(w > 0)
-  assert(h > 0)
-  assert(x >= 0)
-  assert(y >= 0)
-  assert(x + w <= 1 + EPSILON)
-  assert(y + h <= 1 + EPSILON)
+  bounds_assert(x, y, w, h)
 
   local _, err = rex.call('session.resize_layer', {
     session_id = ctx.session_id,
@@ -304,7 +305,7 @@ local function float_resize(ctx, direction)
     return
   end
 
-  local x, y, w, h = layer.bounds[1], layer.bounds[2], layer.bounds[3], layer.bounds[4]
+  local x, y, w, h = unpack(layer.bounds)
   -- already under FLOAT_SIZE_MIN => current size is the floor
   w = clamp(w + spec.step[1] * FLOAT_STEP, math.min(FLOAT_SIZE_MIN, w), 1 - x)
   h = clamp(h + spec.step[2] * FLOAT_STEP, math.min(FLOAT_SIZE_MIN, h), 1 - y)
@@ -320,12 +321,6 @@ rex.action {
     float_resize(ctx, args.direction)
   end,
 }
-
--- float area = tab minus equal padding on every side; positions tile this area
-local FLOAT_AREA = 0.9
-local FLOAT_PADDING = (1 - FLOAT_AREA) / 2
-assert(FLOAT_AREA > 0)
-assert(FLOAT_AREA <= 1)
 
 -- tmux `bind -r`: first press acts, then mode `name` keeps its keys live until esc
 local function repeat_mode_enter(name)
@@ -352,44 +347,51 @@ rex.action {
   end,
 }
 
--- position => { x0, y0, x1, y1 } span of FLOAT_AREA; center => whole, halves, quarters
-local FLOAT_POSITIONS = {
-  center = { 0, 0, 1, 1 },
-  top = { 0, 0, 1, 0.5 },
-  bottom = { 0, 0.5, 1, 1 },
-  left = { 0, 0, 0.5, 1 },
-  right = { 0.5, 0, 1, 1 },
-  top_left = { 0, 0, 0.5, 0.5 },
-  top_right = { 0.5, 0, 1, 0.5 },
-  bottom_left = { 0, 0.5, 0.5, 1 },
-  bottom_right = { 0.5, 0.5, 1, 1 },
+-- float area = POPUP_BOUNDS => floats line up with popups (lazygit)
+-- local FLOAT_AREA = 0.9 -- => consts.POPUP_BOUNDS
+-- position => { x, y } anchor inside POPUP_BOUNDS: 0 => start edge, 0.5 => middle, 1 => end edge;
+-- axis left out => kept; size always kept
+local FLOAT_ANCHORS = {
+  center = { x = 0.5, y = 0.5 },
+  left = { x = 0 },
+  right = { x = 1 },
+  top = { y = 0 },
+  bottom = { y = 1 },
 }
 
--- `position` => { x, y, w, h } fractions of the tab
-local function float_position_bounds(position)
-  local span = FLOAT_POSITIONS[position]
-  assert(span ~= nil)
-  assert(span[1] < span[3])
-  assert(span[2] < span[4])
-
-  return {
-    FLOAT_PADDING + span[1] * FLOAT_AREA,
-    FLOAT_PADDING + span[2] * FLOAT_AREA,
-    (span[3] - span[1]) * FLOAT_AREA,
-    (span[4] - span[2]) * FLOAT_AREA,
-  }
+-- float `size` long at `anchor` along one axis of POPUP_BOUNDS (`start`, `length`) => its start;
+-- bigger than `length` => clamped inside tab
+local function float_anchor_offset(anchor, size, start, length)
+  assert(anchor >= 0)
+  assert(anchor <= 1)
+  assert(size > 0)
+  assert(size <= 1 + EPSILON)
+  return clamp(start + anchor * (length - size), 0, 1 - size)
 end
 
--- snap float to `position` (center / half / quarter of FLOAT_AREA); tiled pane => no-op
+-- move float to `position` at its current size; fill => POPUP_BOUNDS; tiled pane => no-op
 local function float_place(ctx, position)
-  local bounds = float_position_bounds(position)
+  assert(position == 'fill' or FLOAT_ANCHORS[position] ~= nil)
 
   local layer = float_layer(ctx)
   if layer == nil then
     return
   end
 
-  float_bounds_set(ctx, layer, bounds[1], bounds[2], bounds[3], bounds[4])
+  if position == 'fill' then
+    float_bounds_set(ctx, layer, unpack(POPUP_BOUNDS))
+    return
+  end
+
+  local anchor = FLOAT_ANCHORS[position]
+  local x, y, w, h = unpack(layer.bounds)
+  if anchor.x ~= nil then
+    x = float_anchor_offset(anchor.x, w, POPUP_BOUNDS[1], POPUP_BOUNDS[3])
+  end
+  if anchor.y ~= nil then
+    y = float_anchor_offset(anchor.y, h, POPUP_BOUNDS[2], POPUP_BOUNDS[4])
+  end
+  float_bounds_set(ctx, layer, x, y, w, h)
 end
 
 rex.action {
@@ -400,13 +402,13 @@ rex.action {
   end,
 }
 
--- new shell float at `center` position, in ctx pane's cwd; ctx pane gone / no cwd => shell default
+-- new shell float at popup size (POPUP_BOUNDS), in ctx pane's cwd; ctx pane gone / no cwd => shell default
 local function float_new(ctx)
   assert(ctx.session_id ~= nil)
 
   local _, err = rex.call('session.new_layer', {
     session_id = ctx.session_id,
-    bounds = float_position_bounds 'center',
+    bounds = POPUP_BOUNDS,
     focus = true,
     layout = { block = { flavor = SHELL, options = { cwd = block_pwd(ctx) } } },
   })
@@ -576,14 +578,8 @@ end
 
 -- focused float => tiled pane focused, float minimized; tiled pane => app pane.minimize_floating
 local function float_minimize(ctx)
-  assert(ctx.session_id ~= nil)
-  assert(ctx.block_id ~= nil)
-
-  local layer, window = layer_find(ctx.session_id, ctx.block_id)
+  local layer, window = float_layer(ctx)
   if layer == nil then
-    return
-  end
-  if layer.kind == 'tiled' then
     rex.client.queue('pane.minimize_floating', {})
     return
   end
@@ -608,11 +604,8 @@ rex.action {
   name = 'float_minimize_all',
   title = 'Minimize All Floating Panes, Focus Tiled',
   run = function(ctx, args)
-    assert(ctx.session_id ~= nil)
-    assert(ctx.block_id ~= nil)
-
-    local layer, window = layer_find(ctx.session_id, ctx.block_id)
-    if layer ~= nil and layer.kind == 'floating' then
+    local layer, window = float_layer(ctx)
+    if layer ~= nil then
       window_focus_tiled(ctx.session_id, window)
     end
     rex.client.queue('pane.minimize_all_floating', {})
@@ -624,10 +617,7 @@ rex.action {
   name = 'pane_focus_tiled',
   title = 'Focus Tiled Pane',
   run = function(ctx, args)
-    assert(ctx.session_id ~= nil)
-    assert(ctx.block_id ~= nil)
-
-    local layer, window = layer_find(ctx.session_id, ctx.block_id)
+    local layer, window = float_layer(ctx)
     if layer == nil then
       return
     end

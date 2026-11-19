@@ -141,17 +141,19 @@ rex.bind('copy_mode/shift+-', 'pane.copy_mode.move', { to = 'line_start' })
 -- floats of this tab, minimized too => palette pick => shown + focused => panes.lua
 rex.bind(PREFIX .. '>shift+w', 'float_pick')
 
--- floating pane snap: ctrl+hjkl => halves, ctrl+yubn => quarters, ctrl+c => center => panes.lua
+-- floating pane snap, size kept: ctrl+hjkl => push to edge (corner => two edges), ctrl+c => center;
+-- ctrl+f => fill (popup size) => panes.lua
 for key, position in pairs {
   h = 'left',
   j = 'bottom',
   k = 'top',
   l = 'right',
-  y = 'top_left',
-  u = 'top_right',
-  b = 'bottom_left',
-  n = 'bottom_right',
+  -- y = 'top_left', -- => ctrl+h, ctrl+k
+  -- u = 'top_right', -- => ctrl+l, ctrl+k
+  -- b = 'bottom_left', -- => ctrl+h, ctrl+j
+  -- n = 'bottom_right', -- => ctrl+l, ctrl+j
   c = 'center',
+  f = 'fill',
 } do
   rex.bind(PREFIX .. '>ctrl+' .. key, 'float_place', { position = position })
 end
