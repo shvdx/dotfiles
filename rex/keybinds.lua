@@ -129,7 +129,9 @@ rex.bind(PREFIX .. '>shift+f', 'float_new')
 -- tmux defaults: `!` break-pane, `o` next pane, `w` choose-tree; `<` `>` => swap-window -t -1/+1
 rex.bind(PREFIX .. '>shift+1', 'pane.move_to_new_tab')
 rex.bind(PREFIX .. '>o', 'pane.focus_next')
-rex.bind(PREFIX .. '>w', 'pane.go_to')
+-- rex.bind(PREFIX .. '>w', 'pane.go_to') -- => tab_pick
+-- every session's tabs, search `tab session` => tabs.lua
+rex.bind(PREFIX .. '>w', 'tab_pick')
 rex.bind(PREFIX .. '>shift+,', 'client.tab.move.backward')
 rex.bind(PREFIX .. '>shift+.', 'client.tab.move.forward')
 
