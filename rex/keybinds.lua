@@ -44,6 +44,9 @@ rex.unbind('alt+shift+cmd+down', 'pane.move.down')
 -- zoom => prefix z
 rex.unbind('shift+cmd+enter', 'pane.zoom')
 
+-- command palette => prefix w
+rex.unbind('shift+cmd+p', 'client.palette.toggle')
+
 -- close pane => prefix x; cmd+w also holds client.close => drop whole key, else cmd+w closes window
 rex.unbind 'cmd+w'
 -- --------------------------- UNBIND -------------------------------
@@ -129,9 +132,9 @@ rex.bind(PREFIX .. '>shift+f', 'float_new')
 -- tmux defaults: `!` break-pane, `o` next pane, `w` choose-tree; `<` `>` => swap-window -t -1/+1
 rex.bind(PREFIX .. '>shift+1', 'pane.move_to_new_tab')
 rex.bind(PREFIX .. '>o', 'pane.focus_next')
--- rex.bind(PREFIX .. '>w', 'pane.go_to') -- => tab_pick
--- every session's tabs, search `tab session` => tabs.lua
-rex.bind(PREFIX .. '>w', 'tab_pick')
+-- rex.bind(PREFIX .. '>w', 'pane.go_to') -- => client.palette.toggle
+-- rex.bind(PREFIX .. '>w', 'tab_pick') -- => client.palette.toggle
+rex.bind(PREFIX .. '>w', 'client.palette.toggle')
 rex.bind(PREFIX .. '>shift+,', 'client.tab.move.backward')
 rex.bind(PREFIX .. '>shift+.', 'client.tab.move.forward')
 
