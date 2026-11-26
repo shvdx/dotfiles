@@ -189,7 +189,7 @@ rex.bind(PREFIX .. '>shift+4', 'session.rename')
 rex.bind(PREFIX .. '>.', 'pane.rename')
 
 -- save all sessions => ~/.local/state/rex-sessions.json
-rex.bind(PREFIX .. '>ctrl+s', 'session_save')
+-- rex.bind(PREFIX .. '>ctrl+s', 'session_save') -- => built-in session restore
 
 -- popups
 rex.bind('alt+l', 'lazygit_popup')

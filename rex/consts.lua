@@ -13,9 +13,9 @@ consts.SCRATCH_LABEL = 'scratch'
 consts.POPUP_LABELS = { lazygit = true, tasks = true, [consts.SCRATCH_LABEL] = true }
 consts.TASKS_DIR = os.getenv 'HOME' .. '/recs'
 
--- session save/restore
-consts.SESSIONS_PATH = os.getenv 'HOME' .. '/.local/state/rex-sessions.json'
-consts.SESSIONS_MAX = 64
-consts.LAYOUT_DEPTH_MAX = 32
+-- session save/restore => built-in session restore
+-- consts.SESSIONS_PATH = os.getenv 'HOME' .. '/.local/state/rex-sessions.json'
+-- consts.SESSIONS_MAX = 64
+-- consts.LAYOUT_DEPTH_MAX = 32
 
 return consts
